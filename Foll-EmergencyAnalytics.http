@@ -1,0 +1,38 @@
+@baseUrl = http://localhost:5255
+@jwt = REEMPLAZAR_JWT
+@serviceKey = REEMPLAZAR_CLAVE_INTERNA
+
+GET {{baseUrl}}/health/live
+
+###
+GET {{baseUrl}}/api/emergency/incidents/active/patient/25
+Authorization: Bearer {{jwt}}
+
+###
+GET {{baseUrl}}/api/emergency/incidents/history/patient/25
+Authorization: Bearer {{jwt}}
+
+###
+GET {{baseUrl}}/api/emergency/incidents/history/patient/25/monthly?month=11&year=2026
+Authorization: Bearer {{jwt}}
+
+###
+POST {{baseUrl}}/api/emergency/incidents/1/resolve
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "observation": "Paciente atendido por el cuidador." }
+
+###
+POST {{baseUrl}}/api/emergency/incidents/1/false-positive
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "observation": "No hubo una caída." }
+
+###
+PUT {{baseUrl}}/api/emergency/incidents/1/observation
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{ "observation": "Observación final actualizada." }
