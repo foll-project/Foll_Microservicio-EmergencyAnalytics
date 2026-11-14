@@ -2,15 +2,17 @@ using foll_emergency_analytics.EmergencyAnalytics.Domain.Repositories;
 using foll_emergency_analytics.Shared.Infrastructure.Persistence.EFC.Configuration;
 using foll_emergency_analytics.Shared.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace foll_emergency_analytics.EmergencyAnalytics.Interfaces.Internal;
 
-[ApiController, InternalApiKey]
+[ApiController]
 [Route("internal/emergency")]
 public class InternalEmergenciesController(AppDbContext db, IEmergencyIncidentRepository incidents) : ControllerBase
 {
     [HttpGet("incidents/by-key/{incidentKey:guid}")]
+    [Authorize(Policy = "service:emergencies.location.read")]
     public async Task<IActionResult> ByKey(Guid incidentKey)
     {
         var incident = await incidents.FindByIncidentKeyWithFallTypeAsync(incidentKey);
@@ -27,6 +29,7 @@ public class InternalEmergenciesController(AppDbContext db, IEmergencyIncidentRe
     public sealed record PatientsDeletedRequest(IReadOnlyCollection<long> PatientIds);
 
     [HttpPost("patients-deleted")]
+    [Authorize(Policy = "service:emergencies.patients.delete")]
     public async Task<IActionResult> PatientsDeleted(PatientsDeletedRequest request, CancellationToken ct)
     {
         if (request.PatientIds is null || request.PatientIds.Count == 0 || request.PatientIds.Count > 1000 || request.PatientIds.Any(id => id <= 0))

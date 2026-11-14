@@ -35,20 +35,6 @@ public class ArchitectureAndTransitionTests
             assembly => assembly.Name == "foll-backend" || assembly.Name == "Foll-Care");
     }
 
-    [Theory]
-    [InlineData("", "", false)]
-    [InlineData("configured-key", "incorrect", false)]
-    [InlineData("configured-key", "configured-key", true)]
-    public void InternalEndpointRequiresConfiguredMatchingServiceKey(string configured, string actual, bool allowed)
-    {
-        var services = new ServiceCollection().AddSingleton<IConfiguration>(Config(new() { ["InternalApi:ApiKey"] = configured })).BuildServiceProvider();
-        var http = new DefaultHttpContext { RequestServices = services };
-        http.Request.Headers["X-Foll-Service-Key"] = actual;
-        var filter = new AuthorizationFilterContext(new ActionContext(http, new RouteData(), new ActionDescriptor()), new List<IFilterMetadata>());
-        new foll_emergency_analytics.Shared.Infrastructure.Security.InternalApiKeyAttribute().OnAuthorization(filter);
-        Assert.Equal(allowed, filter.Result is null);
-    }
-
     [Fact]
     public async Task ProxyPreservesResolveRequestAndUpstreamStatus()
     {
