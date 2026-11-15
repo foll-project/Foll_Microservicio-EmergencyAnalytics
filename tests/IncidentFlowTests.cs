@@ -55,11 +55,12 @@ public class IncidentFlowTests
     {
         var fixture = new Fixture();
         await fixture.Service.Handle(new RegisterFallDetectedCommand(1001, 1, null, DateTime.UtcNow, null, null, null, null, "{}"));
-        await fixture.Service.Handle(new ResolveFallIncidentCommand(1, 7, "Atendido", DateTime.UtcNow));
+        await fixture.Service.Handle(new ResolveFallIncidentCommand(1, 7, "Atendido", DateTime.UtcNow, "Ana Perez"));
         Assert.Equal(EmergencyIncidentStatus.Resolved, fixture.Incidents.Items[0].Status);
         Assert.Equal(EmergencyAnalyticsEventTypes.IncidentClosedV1, fixture.Outbox.Items[1].Type);
         Assert.Contains("Atendido", fixture.Outbox.Items[1].Payload);
         Assert.Contains("\"ClosedByUserId\":7", fixture.Outbox.Items[1].Payload);
+        Assert.Contains("\"ClosedByName\":\"Ana Perez\"", fixture.Outbox.Items[1].Payload);
     }
 
     private sealed class Fixture

@@ -248,6 +248,40 @@ namespace foll_emergency_analytics.Migrations
                         });
                 });
 
+            modelBuilder.Entity("foll_emergency_analytics.Shared.Infrastructure.Messaging.IntegrationInboxMessage", b =>
+                {
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("event_type");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTime>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at_utc");
+
+                    b.HasKey("EventId")
+                        .HasName("pk_integration_inbox_messages");
+
+                    b.HasIndex("OperationId")
+                        .HasDatabaseName("ix_integration_inbox_messages_operation_id");
+
+                    b.ToTable("integration_inbox_messages", "emergency");
+                });
+
             modelBuilder.Entity("foll_emergency_analytics.EmergencyAnalytics.Domain.Model.Entities.EmergencyIncident", b =>
                 {
                     b.HasOne("foll_emergency_analytics.EmergencyAnalytics.Domain.Model.Entities.FallType", "FallType")

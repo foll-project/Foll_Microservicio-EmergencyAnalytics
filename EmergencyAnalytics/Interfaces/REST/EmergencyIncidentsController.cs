@@ -108,7 +108,8 @@ public class EmergencyIncidentsController : ControllerBase
                 incidentId,
                 userId,
                 resource.Observation,
-                DateTime.UtcNow));
+                DateTime.UtcNow,
+                GetActorName()));
 
             return Ok(new { message = "Incidente marcado como falso positivo." });
         }
@@ -129,7 +130,8 @@ public class EmergencyIncidentsController : ControllerBase
                 incidentId,
                 userId,
                 resource.Observation,
-                DateTime.UtcNow));
+                DateTime.UtcNow,
+                GetActorName()));
 
             return Ok(new { message = "Incidente resuelto." });
         }
@@ -191,6 +193,12 @@ public class EmergencyIncidentsController : ControllerBase
             cancellationReason = incident.CancellationReason?.ToString(),
             finalObservation = incident.FinalObservation
         };
+    }
+
+    private string? GetActorName()
+    {
+        var name = $"{User.FindFirst("firstName")?.Value} {User.FindFirst("lastName")?.Value}".Trim();
+        return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
     private long GetUserIdOrThrow()
