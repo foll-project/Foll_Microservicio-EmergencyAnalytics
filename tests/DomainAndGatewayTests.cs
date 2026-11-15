@@ -107,15 +107,6 @@ public class DomainAndGatewayTests
         Assert.Null(await new DeviceIncidentAssignmentGateway(client).FindAssignedPatientIdAsync(1001));
     }
 
-    [Fact]
-    public async Task EventDeliveryFailureRemainsRetryable()
-    {
-        using var client = Client(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
-        var payload = System.Text.Json.JsonSerializer.SerializeToElement(new { patientId = 25 });
-        await Assert.ThrowsAsync<HttpRequestException>(() => new EmergencyEventGateway(client)
-            .DeliverAsync(new EmergencyEventEnvelope("event", "type", payload), default));
-    }
-
     internal static HttpClient Client(Func<HttpRequestMessage, HttpResponseMessage> action) =>
         new(new Handler(action)) { BaseAddress = new Uri("http://test/") };
     private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> action) : HttpMessageHandler

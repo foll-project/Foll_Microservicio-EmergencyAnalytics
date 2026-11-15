@@ -96,7 +96,7 @@ public class EmergencyIncidentCommandService : IEmergencyIncidentCommandService
 
         incident.MarkAsFalsePositive(command.ActorUserId, command.Observation, command.MarkedAtUtc);
 
-        await ProcessDomainEventsAsync(incident);
+        await ProcessDomainEventsAsync(incident, command.ActorName);
         incident.ClearDomainEvents();
         _incidentRepository.Update(incident);
         await _unitOfWork.CompleteAsync();
@@ -108,7 +108,7 @@ public class EmergencyIncidentCommandService : IEmergencyIncidentCommandService
 
         incident.Resolve(command.ActorUserId, command.Observation, command.ResolvedAtUtc);
 
-        await ProcessDomainEventsAsync(incident);
+        await ProcessDomainEventsAsync(incident, command.ActorName);
         incident.ClearDomainEvents();
         _incidentRepository.Update(incident);
         await _unitOfWork.CompleteAsync();
@@ -130,7 +130,7 @@ public class EmergencyIncidentCommandService : IEmergencyIncidentCommandService
         await _unitOfWork.CompleteAsync();
     }
 
-    private async Task ProcessDomainEventsAsync(EmergencyIncident incident)
+    private async Task ProcessDomainEventsAsync(EmergencyIncident incident, string? actorName = null)
     {
         foreach (var domainEvent in incident.DomainEvents)
         {
@@ -172,7 +172,8 @@ public class EmergencyIncidentCommandService : IEmergencyIncidentCommandService
                             cancelled.CancelledAtUtc,
                             cancelled.Reason,
                             cancelled.ActorUserId,
-                            cancelled.Observation),
+                            cancelled.Observation,
+                            cancelled.ActorUserId.HasValue ? actorName : null),
                         cancelled.OccurredOn));
                     break;
 
@@ -192,7 +193,8 @@ public class EmergencyIncidentCommandService : IEmergencyIncidentCommandService
                             resolved.ResolvedAtUtc,
                             null,
                             resolved.ActorUserId,
-                            resolved.Observation),
+                            resolved.Observation,
+                            actorName),
                         resolved.OccurredOn));
                     break;
             }

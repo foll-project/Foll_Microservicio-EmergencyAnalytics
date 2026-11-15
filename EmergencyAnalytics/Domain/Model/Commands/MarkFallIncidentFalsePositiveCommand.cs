@@ -4,4 +4,5 @@ public record MarkFallIncidentFalsePositiveCommand(
     long IncidentId,
     long ActorUserId,
     string? Observation,
-    DateTime MarkedAtUtc);
+    DateTime MarkedAtUtc,
+    string? ActorName = null);

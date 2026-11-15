@@ -58,7 +58,7 @@ public class EmergencyOutboxPublisherBackgroundService : BackgroundService
                         };
                         using var payload = JsonDocument.Parse(message.Payload);
                         await gateway.DeliverAsync(new EmergencyEventEnvelope(
-                            $"{message.Type}:{incidentKey:D}", message.Type, payload.RootElement.Clone()), stoppingToken);
+                            $"{message.Type}:{incidentKey:D}", message.Type, payload.RootElement.Clone(), message.OccurredOn), stoppingToken);
                         await publisher.Publish(notification, stoppingToken);
                         message.MarkProcessed(DateTime.UtcNow);
                     }

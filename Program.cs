@@ -14,7 +14,7 @@ using foll_emergency_analytics.Shared.Infrastructure.Configuration;
 using foll_emergency_analytics.Shared.Infrastructure.Persistence.EFC.Configuration;
 using foll_emergency_analytics.Shared.Infrastructure.Persistence.EFC.Repositories;
 using foll_emergency_analytics.Shared.Infrastructure.Swagger;
-using foll_emergency_analytics.Shared.Infrastructure.Security;
+using foll_emergency_analytics.Shared.Infrastructure.Messaging;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -38,31 +38,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret)),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(builder.Configuration["JwtSettings:Secret"]!)),
         ValidateIssuer = false, ValidateAudience = false, ValidateLifetime = true, ClockSkew = TimeSpan.Zero
-    };
-    options.Events = new JwtBearerEvents
-    {
-        OnTokenValidated = context =>
-        {
-            if (context.Principal?.FindFirst("token_use")?.Value == "service")
-                context.Fail("La API de usuarios requiere un JWT de usuario.");
-            return Task.CompletedTask;
-        }
     };
 });
 builder.Services.AddAuthorization();
-builder.Services.AddServiceTokenClient(builder.Configuration, required: true);
-builder.Services.AddServiceJwtValidation(builder.Configuration, new Dictionary<string, string>
-{
-    ["emergencies.location.read"] = "foll-emergency", ["emergencies.patients.delete"] = "foll-emergency"
-});
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "Foll EmergencyAnalytics v2", Version = "v1" });
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization", Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT", In = ParameterLocation.Header
+    });
+    options.AddSecurityDefinition("BackgroundQueryKey", new OpenApiSecurityScheme
+    {
+        Name = "X-Foll-Service-Key", Type = SecuritySchemeType.ApiKey, In = ParameterLocation.Header,
+        Description = "Consulta de contexto sin sesión de usuario (worker/enlace público)."
     });
     options.OperationFilter<AuthorizeOperationFilter>();
 });
@@ -75,11 +66,30 @@ builder.Services.AddScoped<IFallTypeRepository, FallTypeRepository>();
 builder.Services.AddScoped<IEmergencyOutboxMessageRepository, EmergencyOutboxMessageRepository>();
 builder.Services.AddScoped<IEmergencyIncidentCommandService, EmergencyIncidentCommandService>();
 builder.Services.AddScoped<IEmergencyIncidentQueryService, EmergencyIncidentQueryService>();
-builder.Services.AddHttpClient<IDeviceIncidentAssignmentService, DeviceIncidentAssignmentGateway>(client => ConfigureClient(client, "Devices"))
-    .AddHttpMessageHandler(sp => new ServiceJwtHandler(sp.GetRequiredService<IServiceTokenProvider>(), "foll-devices"));
+builder.Services.AddHttpClient<IDeviceIncidentAssignmentService, DeviceIncidentAssignmentGateway>(client =>
+{
+    ConfigureClient(client, "Devices");
+    var apiKey = builder.Configuration["Services:Devices:ApiKey"];
+    if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Length < 32)
+        throw new InvalidOperationException("Configure Services:Devices:ApiKey (al menos 32 caracteres) para consultar asignaciones.");
+    client.DefaultRequestHeaders.Add("X-Foll-Service-Key", apiKey);
+})
+    .RedactLoggedHeaders(["X-Foll-Service-Key"])
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient<IPatientIncidentAccessService, PatientIncidentAccessGateway>(client => ConfigureClient(client, "Care"));
-builder.Services.AddHttpClient<IEmergencyEventGateway, EmergencyEventGateway>(client => ConfigureClient(client, "Notifications"))
-    .AddHttpMessageHandler(sp => new ServiceJwtHandler(sp.GetRequiredService<IServiceTokenProvider>(), "foll-notifications"));
+builder.Services.AddOptions<RabbitMqOptions>().Bind(builder.Configuration.GetSection("RabbitMq"))
+    .Validate(o => !string.IsNullOrWhiteSpace(o.HostName) && o.Port is > 0 and <= 65535 &&
+        !string.IsNullOrWhiteSpace(o.UserName) && !string.IsNullOrWhiteSpace(o.Password) &&
+        !string.IsNullOrWhiteSpace(o.VirtualHost) && !string.IsNullOrWhiteSpace(o.ExchangeName) &&
+        !string.IsNullOrWhiteSpace(o.QueueName) && o.PublishTimeoutSeconds is > 0 and <= 120,
+        "Configuracion RabbitMq incompleta o invalida.").ValidateOnStart();
+builder.Services.AddSingleton<RabbitMqConnection>(sp => new(
+    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RabbitMqOptions>>(),
+    ["emergency-analytics.incident-opened.v1", "emergency-analytics.incident-closed.v1"],
+    sp.GetRequiredService<ILogger<RabbitMqConnection>>()));
+builder.Services.AddSingleton<IEmergencyEventGateway, RabbitMqEmergencyEventPublisher>();
+builder.Services.AddIntegrationConsumer<PatientsDeletedHandler>(builder.Configuration,
+    "emergency.care-account-deletion-completed.v1", AccountDeletionCompleted.EventType);
 builder.Services.AddSingleton<IEmergencyAnalyticsMqttPublisher, EmergencyAnalyticsMqttPublisher>();
 if (builder.Configuration.GetValue("EmergencyAnalyticsMqtt:Enabled", true))
     builder.Services.AddHostedService<EmergencyAnalyticsMqttSubscriberBackgroundService>();
@@ -106,6 +116,7 @@ app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>
         await db.FallTypes.AsNoTracking().AnyAsync(ct);
         await db.EmergencyOutboxMessages.AsNoTracking().AnyAsync(ct);
         await db.EmergencyIncidents.AsNoTracking().AnyAsync(ct);
+        await db.Set<IntegrationInboxMessage>().AsNoTracking().AnyAsync(ct);
         return Results.Ok(new { status = "ready" });
     }
     catch { return Results.StatusCode(503); }
